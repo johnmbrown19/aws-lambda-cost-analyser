@@ -1,29 +1,36 @@
+import { config } from "./config";
+import { detectThresholdAnomalies } from "./detectors/threshold";
+import { MockCostProvider } from "./providers/mock";
 
-type CostItem = {
-  service: string;
-  cost: number;
-};
+async function main(): Promise<void> {
+  const provider = new MockCostProvider();
+  const costs = await provider.getServiceCosts();
+  const anomalies = detectThresholdAnomalies(costs, config.thresholdAmount);
 
-async function fetchCosts(): Promise<CostItem[]> {
-  // mock API for now
-  return [
-    { service: "Lambda", cost: 120 },
-    { service: "SQS", cost: 40 },
-    { service: "ALB", cost: 75 },
-  ];
+  if (config.outputJson) {
+    console.log(JSON.stringify({ costs, anomalies }, null, 2));
+  } else {
+    console.log("Service costs:");
+    for (const cost of costs) {
+      console.log(`- ${cost.service}: ${cost.amount} ${cost.currency}`);
+    }
+
+    console.log("\nAnomalies:");
+    if (anomalies.length === 0) {
+      console.log("- none");
+    } else {
+      for (const anomaly of anomalies) {
+        console.log(`- ${anomaly.service}: ${anomaly.reason}`);
+      }
+    }
+  }
+
+  if (anomalies.length > 0) {
+    process.exitCode = 2;
+  }
 }
 
-function detectAnomalies(costs: CostItem[]): CostItem[] {
-  const threshold = 100;
-  return costs.filter(c => c.cost > threshold);
-}
-
-async function main() {
-  const costs = await fetchCosts();
-  const anomalies = detectAnomalies(costs);
-
-  console.log("All costs:", costs);
-  console.log("Anomalies:", anomalies);
-}
-
-main();
+main().catch((error: unknown) => {
+  console.error("Application failed:", error);
+  process.exit(1);
+});
